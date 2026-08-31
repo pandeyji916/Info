@@ -20,7 +20,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 BOT_TOKEN = "8900586063:AAH79gfc7E6FVjrbsxl664YDMNYzuw_mJcM"
 BOT_USERNAME = "nyxor_ji_bot"        # provided by you (no @)
 BUY_CREDITS_USERNAME = "FLEXSAMAY" # contact username (no @)
-ADMIN_IDS = [5385377266]               # admin numeric IDs
+ADMIN_IDS = [5385377266 , 6154383311]               # admin numeric IDs
 
 # core settings
 REFERRAL_BONUS = 2
