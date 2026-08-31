@@ -17,10 +17,10 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot, Me
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, CallbackContext
 
 # ---------------- CONFIG ----------------
-BOT_TOKEN = "8625091227:AAFeBaRX04tHLWlbguh0w-9FoMbLrGZTC1o"
-BOT_USERNAME = "Camerabbbot"        # provided by you (no @)
-BUY_CREDITS_USERNAME = "trolex00" # contact username (no @)
-ADMIN_IDS = [7355745231]               # admin numeric IDs
+BOT_TOKEN = "8900586063:AAH79gfc7E6FVjrbsxl664YDMNYzuw_mJcM"
+BOT_USERNAME = "nyxor_ji_bot"        # provided by you (no @)
+BUY_CREDITS_USERNAME = "FLEXSAMAY" # contact username (no @)
+ADMIN_IDS = [5385377266]               # admin numeric IDs
 
 # core settings
 REFERRAL_BONUS = 2
@@ -47,7 +47,7 @@ VEHICLE_API = "http://cybersameer-jarvis-apis1.onrender.com/vehicle?key=VIRAT&rc
 IFSC_API = "https://yourapi.com/ifsc?ifsc={ifsc}"
 UPI_API = "http://cybersameer-jarvis-apis1.onrender.com/upi?key=VIRAT&upi_id={upi}"
 # if you have any problem to add api just Paste file+your api in chatgpt and ask🤠
-# or Contact Me- @trolex00
+# or Contact Me- @FLEXSAMAY 
 
 MAINTENANCE_TEXT = "⚙️ This feature is under maintenance. Credits not deducted."
 
@@ -189,7 +189,7 @@ def send_backup_to_admins() -> bool:
 
 # ---------------- Styled UI text ----------------
 WELCOME_TEXT = (
-    "👋 *𝗛𝗶 {name} — 𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝘁𝗼 𝗙𝗞𝗦 𝗢𝗦𝗜𝗡𝗧 𝗕𝗢𝗧 ⚡*\n\n"
+    "👋 *𝗛𝗶 {name} — 𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝘁𝗼 @nyxor_ji_bot ⚡*\n\n"
     "💡 *Educational & lawful OSINT use only.*\n"
     "📚 Use findings responsibly — do not harass, doxx, or commit illegal acts We Are Not Responsible For Anything Illigal.\n\n"
     "🔐 *Credits:* Each search costs *1 credit*.\n"
