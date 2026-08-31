@@ -2,7 +2,7 @@
 # Edit Code Carefully Replace Your Bot Name IN FKS
 # Must See Readme.txt File In Zip For Complete Bot Instructions 
 # Requirements:
-# pip install -r requirements.txt
+# pip install python-telegram-bot==20.7 requests
 # Replace BOT_TOKEN with your bot token, then run: python bot.py
 
 import os
@@ -17,10 +17,10 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot, Me
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, CallbackContext
 
 # ---------------- CONFIG ----------------
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-BOT_USERNAME = "nyxor_ji_bot"        # provided by you (no @)
-BUY_CREDITS_USERNAME = "FLEXSAMAY" # contact username (no @)
-ADMIN_IDS = [5385377266 , 6154383311]               # admin numeric IDs
+BOT_TOKEN = "8625091227:AAFeBaRX04tHLWlbguh0w-9FoMbLrGZTC1o"
+BOT_USERNAME = "Camerabbbot"        # provided by you (no @)
+BUY_CREDITS_USERNAME = "trolex00" # contact username (no @)
+ADMIN_IDS = [7355745231]               # admin numeric IDs
 
 # core settings
 REFERRAL_BONUS = 2
@@ -47,7 +47,7 @@ VEHICLE_API = "http://cybersameer-jarvis-apis1.onrender.com/vehicle?key=VIRAT&rc
 IFSC_API = "https://yourapi.com/ifsc?ifsc={ifsc}"
 UPI_API = "http://cybersameer-jarvis-apis1.onrender.com/upi?key=VIRAT&upi_id={upi}"
 # if you have any problem to add api just Paste file+your api in chatgpt and ask🤠
-# or Contact Me- @FLEXSAMAY 
+# or Contact Me- @trolex00
 
 MAINTENANCE_TEXT = "⚙️ This feature is under maintenance. Credits not deducted."
 
@@ -82,23 +82,6 @@ def ensure_files_exist():
 def gen_code(length: int = GENERATED_CODE_LENGTH) -> str:
     chars = string.ascii_uppercase + string.digits
     return "".join(random.choice(chars) for _ in range(length))
-
-def split_telegram_text(text: str, limit: int = 3900) -> list[str]:
-    """Split long responses into Telegram-safe chunks without truncating data."""
-    if len(text) <= limit:
-        return [text]
-    chunks = []
-    remaining = text
-    while remaining:
-        if len(remaining) <= limit:
-            chunks.append(remaining)
-            break
-        cut = remaining.rfind("\n", 0, limit)
-        if cut <= 0:
-            cut = limit
-        chunks.append(remaining[:cut])
-        remaining = remaining[cut:].lstrip("\n")
-    return chunks
 
 def http_get(url: str, timeout: int = 12) -> Optional[requests.Response]:
     headers = {"User-Agent": "FKS-OSINT-BOT/8.8.3"}
@@ -182,7 +165,7 @@ def scrub_response(obj):
         return obj
 
 # ---------------- backup ----------------
-async def send_backup_to_admins() -> bool:
+def send_backup_to_admins() -> bool:
     meta = read_json(BACKUP_META)
     now = int(time.time())
     if now - meta.get("last", 0) < BACKUP_COOLDOWN:
@@ -194,7 +177,7 @@ async def send_backup_to_admins() -> bool:
             for admin_id in ADMIN_IDS:
                 try:
                     with open(USERS_FILE, "rb") as f:
-                        await bot.send_document(chat_id=int(admin_id), document=f, filename="users.json", caption="📦 FKS OSINT - users backup")
+                        bot.send_document(chat_id=int(admin_id), document=f, filename="users.json", caption="📦 FKS OSINT - users backup")
                 except Exception as e:
                     logger.warning(f"send_backup to {admin_id} failed: {e}")
         meta["last"] = now
@@ -206,7 +189,7 @@ async def send_backup_to_admins() -> bool:
 
 # ---------------- Styled UI text ----------------
 WELCOME_TEXT = (
-    "👋 *𝗛𝗶 {name} — 𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝘁𝗼 @nyxor_ji_bot ⚡*\n\n"
+    "👋 *𝗛𝗶 {name} — 𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝘁𝗼 𝗙𝗞𝗦 𝗢𝗦𝗜𝗡𝗧 𝗕𝗢𝗧 ⚡*\n\n"
     "💡 *Educational & lawful OSINT use only.*\n"
     "📚 Use findings responsibly — do not harass, doxx, or commit illegal acts We Are Not Responsible For Anything Illigal.\n\n"
     "🔐 *Credits:* Each search costs *1 credit*.\n"
@@ -588,14 +571,11 @@ async def message_handler(update: Update, context: CallbackContext):
         context.user_data.pop("mode", None); return
 
     # credit check & deduct
-    credit_deducted = False
     if not is_admin_user(user):
         if users[uid].get("credits", 0) < SEARCH_COST:
             await update.message.reply_text("❌ *Not enough credits.* Redeem or contact admin.", parse_mode="Markdown")
             context.user_data.pop("mode", None); return
-        users[uid]["credits"] = users[uid].get("credits", 0) - SEARCH_COST
-        write_json(USERS_FILE, users)
-        credit_deducted = True
+        users[uid]["credits"] = users[uid].get("credits", 0) - SEARCH_COST; write_json(USERS_FILE, users)
 
     # progress message
     try: progress_msg = await update.message.reply_text("⏳ Fetching details...")
@@ -613,10 +593,20 @@ async def message_handler(update: Update, context: CallbackContext):
             r = http_get(AADHAAR_API.format(aadhaar=text))
             if not r: r = http_get(FAMILY_AADHAAR_API.format(aadhaar=text))
         elif mode == "inst":
-            r = http_get(INSTAGRAM_API.format(inst=text))
+            r = http_get(inst_API.format(inst=text))
         elif mode == "ifsc":
             r = http_get(IFSC_API.format(ifsc=text.upper()))
         elif mode == "vehicle_rc":
+            r_rc = http_get(RC_API.format(rc=text))
+            data_rc = r_rc.json() if r_rc else None
+            if data_rc and not (isinstance(data_rc, dict) and data_rc.get("error")):
+                cleaned = scrub_response(data_rc)
+                js = json.dumps(cleaned, indent=2, ensure_ascii=False)
+                if progress_msg:
+                    try: await progress_msg.delete()
+                    except: pass
+                await update.message.reply_text(f"📑 *RC Results*\n```{js}```", parse_mode="Markdown")
+                context.user_data.pop("mode", None); return
             r = http_get(VEHICLE_API.format(rc=text))
         elif mode == "upi":
             upi_input = text.strip()
@@ -631,16 +621,11 @@ async def message_handler(update: Update, context: CallbackContext):
         if progress_msg:
             try: await progress_msg.delete()
             except: pass
-        result_text = "🔎 Results:\n" + js
-        for chunk in split_telegram_text(result_text):
-            await update.message.reply_text(chunk)
+        await update.message.reply_text(f"🔎 *Results:*\n```{js}```", parse_mode="Markdown")
     except Exception as e:
         logger.warning(f"search error {mode}: {e}")
-        # refund only when a credit was actually deducted
-        if credit_deducted:
-            users = read_json(USERS_FILE)
-            users[uid]["credits"] = users[uid].get("credits", 0) + SEARCH_COST
-            write_json(USERS_FILE, users)
+        # refund credit
+        users = read_json(USERS_FILE); users[uid]["credits"] = users[uid].get("credits", 0) + SEARCH_COST; write_json(USERS_FILE, users)
         if progress_msg:
             try: await progress_msg.delete()
             except: pass
@@ -677,7 +662,7 @@ async def admin_buttons(update: Update, context: CallbackContext):
         context.user_data["admin_state"] = "user_info_waiting"; await q.edit_message_text("🔎 Send numeric user_id to view user's balance & referrals:"); return
 
     if data == "admin_backup":
-        ok = await send_backup_to_admins(); await q.edit_message_text("📦 Backup sent to admins." if ok else "⚠️ Backup failed or cooldown active.", reply_markup=admin_panel_kb()); return
+        ok = send_backup_to_admins(); await q.edit_message_text("📦 Backup sent to admins." if ok else "⚠️ Backup failed or cooldown active.", reply_markup=admin_panel_kb()); return
 
     if data == "admin_ban":
         context.user_data["admin_state"] = "ban_waiting"; await q.edit_message_text("🚫 Send numeric user_id to BAN:", reply_markup=admin_action_back_buttons()); return
@@ -709,8 +694,6 @@ async def admin_buttons(update: Update, context: CallbackContext):
 
 # ---------------- Setup & run ----------------
 def main():
-    if not BOT_TOKEN:
-        raise RuntimeError("BOT_TOKEN environment variable is not set.")
     ensure_files_exist()
     app = Application.builder().token(BOT_TOKEN).build()
 
