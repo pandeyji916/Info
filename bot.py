@@ -17,7 +17,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot, Me
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, CallbackContext
 
 # ---------------- CONFIG ----------------
-BOT_TOKEN = "8900586063:AAH79gfc7E6FVjrbsxl664YDMNYzuw_mJcM"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 BOT_USERNAME = "nyxor_ji_bot"        # provided by you (no @)
 BUY_CREDITS_USERNAME = "FLEXSAMAY" # contact username (no @)
 ADMIN_IDS = [5385377266 , 6154383311]               # admin numeric IDs
@@ -165,7 +165,7 @@ def scrub_response(obj):
         return obj
 
 # ---------------- backup ----------------
-def send_backup_to_admins() -> bool:
+async def send_backup_to_admins() -> bool:
     meta = read_json(BACKUP_META)
     now = int(time.time())
     if now - meta.get("last", 0) < BACKUP_COOLDOWN:
@@ -177,7 +177,7 @@ def send_backup_to_admins() -> bool:
             for admin_id in ADMIN_IDS:
                 try:
                     with open(USERS_FILE, "rb") as f:
-                        bot.send_document(chat_id=int(admin_id), document=f, filename="users.json", caption="📦 FKS OSINT - users backup")
+                        await bot.send_document(chat_id=int(admin_id), document=f, filename="users.json", caption="📦 FKS OSINT - users backup")
                 except Exception as e:
                     logger.warning(f"send_backup to {admin_id} failed: {e}")
         meta["last"] = now
@@ -571,11 +571,14 @@ async def message_handler(update: Update, context: CallbackContext):
         context.user_data.pop("mode", None); return
 
     # credit check & deduct
+    credit_deducted = False
     if not is_admin_user(user):
         if users[uid].get("credits", 0) < SEARCH_COST:
             await update.message.reply_text("❌ *Not enough credits.* Redeem or contact admin.", parse_mode="Markdown")
             context.user_data.pop("mode", None); return
-        users[uid]["credits"] = users[uid].get("credits", 0) - SEARCH_COST; write_json(USERS_FILE, users)
+        users[uid]["credits"] = users[uid].get("credits", 0) - SEARCH_COST
+        write_json(USERS_FILE, users)
+        credit_deducted = True
 
     # progress message
     try: progress_msg = await update.message.reply_text("⏳ Fetching details...")
@@ -593,20 +596,10 @@ async def message_handler(update: Update, context: CallbackContext):
             r = http_get(AADHAAR_API.format(aadhaar=text))
             if not r: r = http_get(FAMILY_AADHAAR_API.format(aadhaar=text))
         elif mode == "inst":
-            r = http_get(inst_API.format(inst=text))
+            r = http_get(INSTAGRAM_API.format(inst=text))
         elif mode == "ifsc":
             r = http_get(IFSC_API.format(ifsc=text.upper()))
         elif mode == "vehicle_rc":
-            r_rc = http_get(RC_API.format(rc=text))
-            data_rc = r_rc.json() if r_rc else None
-            if data_rc and not (isinstance(data_rc, dict) and data_rc.get("error")):
-                cleaned = scrub_response(data_rc)
-                js = json.dumps(cleaned, indent=2, ensure_ascii=False)
-                if progress_msg:
-                    try: await progress_msg.delete()
-                    except: pass
-                await update.message.reply_text(f"📑 *RC Results*\n```{js}```", parse_mode="Markdown")
-                context.user_data.pop("mode", None); return
             r = http_get(VEHICLE_API.format(rc=text))
         elif mode == "upi":
             upi_input = text.strip()
@@ -624,8 +617,11 @@ async def message_handler(update: Update, context: CallbackContext):
         await update.message.reply_text(f"🔎 *Results:*\n```{js}```", parse_mode="Markdown")
     except Exception as e:
         logger.warning(f"search error {mode}: {e}")
-        # refund credit
-        users = read_json(USERS_FILE); users[uid]["credits"] = users[uid].get("credits", 0) + SEARCH_COST; write_json(USERS_FILE, users)
+        # refund only when a credit was actually deducted
+        if credit_deducted:
+            users = read_json(USERS_FILE)
+            users[uid]["credits"] = users[uid].get("credits", 0) + SEARCH_COST
+            write_json(USERS_FILE, users)
         if progress_msg:
             try: await progress_msg.delete()
             except: pass
@@ -662,7 +658,7 @@ async def admin_buttons(update: Update, context: CallbackContext):
         context.user_data["admin_state"] = "user_info_waiting"; await q.edit_message_text("🔎 Send numeric user_id to view user's balance & referrals:"); return
 
     if data == "admin_backup":
-        ok = send_backup_to_admins(); await q.edit_message_text("📦 Backup sent to admins." if ok else "⚠️ Backup failed or cooldown active.", reply_markup=admin_panel_kb()); return
+        ok = await send_backup_to_admins(); await q.edit_message_text("📦 Backup sent to admins." if ok else "⚠️ Backup failed or cooldown active.", reply_markup=admin_panel_kb()); return
 
     if data == "admin_ban":
         context.user_data["admin_state"] = "ban_waiting"; await q.edit_message_text("🚫 Send numeric user_id to BAN:", reply_markup=admin_action_back_buttons()); return
@@ -694,6 +690,8 @@ async def admin_buttons(update: Update, context: CallbackContext):
 
 # ---------------- Setup & run ----------------
 def main():
+    if not BOT_TOKEN:
+        raise RuntimeError("BOT_TOKEN environment variable is not set.")
     ensure_files_exist()
     app = Application.builder().token(BOT_TOKEN).build()
 
