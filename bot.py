@@ -2,7 +2,7 @@
 # Edit Code Carefully Replace Your Bot Name IN FKS
 # Must See Readme.txt File In Zip For Complete Bot Instructions 
 # Requirements:
-# pip install python-telegram-bot==20.7 requests
+# pip install -r requirements.txt
 # Replace BOT_TOKEN with your bot token, then run: python bot.py
 
 import os
@@ -82,6 +82,23 @@ def ensure_files_exist():
 def gen_code(length: int = GENERATED_CODE_LENGTH) -> str:
     chars = string.ascii_uppercase + string.digits
     return "".join(random.choice(chars) for _ in range(length))
+
+def split_telegram_text(text: str, limit: int = 3900) -> list[str]:
+    """Split long responses into Telegram-safe chunks without truncating data."""
+    if len(text) <= limit:
+        return [text]
+    chunks = []
+    remaining = text
+    while remaining:
+        if len(remaining) <= limit:
+            chunks.append(remaining)
+            break
+        cut = remaining.rfind("\n", 0, limit)
+        if cut <= 0:
+            cut = limit
+        chunks.append(remaining[:cut])
+        remaining = remaining[cut:].lstrip("\n")
+    return chunks
 
 def http_get(url: str, timeout: int = 12) -> Optional[requests.Response]:
     headers = {"User-Agent": "FKS-OSINT-BOT/8.8.3"}
@@ -614,7 +631,9 @@ async def message_handler(update: Update, context: CallbackContext):
         if progress_msg:
             try: await progress_msg.delete()
             except: pass
-        await update.message.reply_text(f"🔎 *Results:*\n```{js}```", parse_mode="Markdown")
+        result_text = "🔎 Results:\n" + js
+        for chunk in split_telegram_text(result_text):
+            await update.message.reply_text(chunk)
     except Exception as e:
         logger.warning(f"search error {mode}: {e}")
         # refund only when a credit was actually deducted
