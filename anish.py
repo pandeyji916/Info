@@ -19,8 +19,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ==================== CONFIGURATION ====================
-BOT_TOKEN = '8739083677:AAHtaMa1Sc12-RWmbgzCMMCIRZu7qYgvYn4'
-API_URL = f'https://api.telegram.org/bot{BOT_TOKEN}/'
+BOT_TOKEN = '8900586063:AAFRx5dnqWLjQpHt5LaPCVtGDDknoQ_ml8E'
+API_URL = f'https://api.telegram.org/bot{8900586063:AAFRx5dnqWLjQpHt5LaPCVtGDDknoQ_ml8E}/'
 
 # API Endpoints
 NUMBER_API_ENDPOINT = 'https://cybersameer-jarvis-apis1.onrender.com/num?key=DEVELOPERCYBERSAMEER&num={term}'
