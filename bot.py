@@ -18,9 +18,9 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 
 # ---------------- CONFIG ----------------
 BOT_TOKEN = "8900586063:AAFRx5dnqWLjQpHt5LaPCVtGDDknoQ_ml8E"
-BOT_USERNAME = "Camerabbbot"        # provided by you (no @)
-BUY_CREDITS_USERNAME = "trolex00" # contact username (no @)
-ADMIN_IDS = [7355745231]               # admin numeric IDs
+BOT_USERNAME = "@nyxor_ji_bot"        # provided by you (no @)
+BUY_CREDITS_USERNAME = "FLEXSAMAY" # contact username (no @)
+ADMIN_IDS = [5385377266]               # admin numeric IDs
 
 # core settings
 REFERRAL_BONUS = 2
