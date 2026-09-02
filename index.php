@@ -2,7 +2,7 @@
 ob_start();
 
 // ========== CONFIG ==========
-$botToken = "8900586063:AAEK5BJ5kccoAOYkLdMw0fuGAnsI4TsIL4A";
+$botToken = "8893699898:AAFeuHPWMvj4rszsDxZkEECnXHAEAG8uTgQ";
 $website = "https://api.telegram.org/bot".$botToken;
 $adminID = "5385377266";
 
