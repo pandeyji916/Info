@@ -1,10 +1,17 @@
 <?php
 ob_start();
+chdir(__DIR__);
 
 // ========== CONFIG ==========
-$botToken = "8893699898:AAFeuHPWMvj4rszsDxZkEECnXHAEAG8uTgQ";
+// Railway Variables: BOT_TOKEN and ADMIN_ID
+$botToken = trim((string)getenv("BOT_TOKEN"));
+$adminID  = trim((string)getenv("ADMIN_ID"));
+
+if ($botToken === '') {
+    http_response_code(500);
+    exit("BOT_TOKEN environment variable is missing.");
+}
 $website = "https://api.telegram.org/bot".$botToken;
-$adminID = "5385377266";
 
 // ========== FILES ==========
 foreach(["balances.json","orders.json","temp.json","users.json","settings.json","categories.json","products.json"] as $f) {
@@ -33,7 +40,18 @@ if(count($categories) == 0){
 }
 
 // ========== GET UPDATE ==========
-$update = json_decode(file_get_contents("php://input"), true);
+// Railway health check/browser requests should not be treated as Telegram updates.
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    http_response_code(200);
+    exit("TNL CODES bot is running.");
+}
+
+$rawUpdate = file_get_contents("php://input");
+$update = json_decode($rawUpdate, true);
+if (!is_array($update)) {
+    http_response_code(200);
+    exit;
+}
 
 if(isset($update["callback_query"])){
     $chat_id = $update["callback_query"]["message"]["chat"]["id"];
@@ -53,11 +71,21 @@ if(isset($update["callback_query"])){
     $data = "";
 }
 
+if ($chat_id == 0 || $user_id == 0) {
+    http_response_code(200);
+    exit;
+}
+
 // ========== LOAD DATA ==========
 $balances = json_decode(file_get_contents("balances.json"), true);
+if (!is_array($balances)) $balances = [];
+
 $users = json_decode(file_get_contents("users.json"), true);
 $orders = json_decode(file_get_contents("orders.json"), true);
 $products = json_decode(file_get_contents("products.json"), true);
+if (!is_array($users)) $users = [];
+if (!is_array($orders)) $orders = [];
+if (!is_array($products)) $products = [];
 
 if(!isset($balances[$user_id])) $balances[$user_id] = 0;
 if(!isset($users[$user_id])){
@@ -747,12 +775,20 @@ function sendProductPlans($chat_id, $message_id, $pid){
         return;
     }
     
-    usort($plans, function($a, $b) { return $a['days'] - $b['days']; });
+    // Keep the ORIGINAL array index in callback_data. Sorting a copied array
+    // without preserving indexes can make users buy a different plan.
+    $sortedPlans = [];
+    foreach ($plans as $originalIndex => $plan) {
+        $plan['_original_index'] = $originalIndex;
+        $sortedPlans[] = $plan;
+    }
+    usort($sortedPlans, function($a, $b) { return ($a['days'] ?? 0) <=> ($b['days'] ?? 0); });
     
     $msg = "📦 <b>{$p['name']}</b>\n\n<b>Choose a plan</b>\n";
     $kb = [];
     
-    foreach($plans as $index => $plan){
+    foreach($sortedPlans as $plan){
+        $index = $plan['_original_index'];
         $day_text = $plan['days'] . ($plan['days'] > 1 ? " Days" : " Day");
         $keys_count = isset($plan['keys']) ? count($plan['keys']) : 0;
         $msg .= "\n• {$day_text} — ₹{$plan['price']} (".$keys_count." keys)";
@@ -1026,8 +1062,10 @@ function sendProducts($chat_id, $message_id, $cid){
 function sendOrders($chat_id, $message_id, $user_id){
     $orders = json_decode(file_get_contents("orders.json"), true);
     $my_orders = [];
-    foreach($orders as $id => $o){ 
-        if($o['user'] == $user_id) $my_orders[$id] = $o; 
+    foreach($orders as $id => $o){
+        if (($o['user'] ?? null) == $user_id && isset($o['product_name'], $o['days'], $o['price'], $o['key'])) {
+            $my_orders[$id] = $o;
+        }
     }
     if(count($my_orders) == 0){
         $msg = "📄 <b>RECIPT</b>\n\nYou haven't made any purchases yet.";
@@ -1128,9 +1166,9 @@ function createFamPayOrder($chat_id, $message_id, $user_id, $amount){
         editMsg($chat_id, $message_id, "❌ Amount ₹1 se ₹5000 ke beech me hona chahiye", btn([[["⬅️ Back","backkey"]]])); 
         return; 
     } 
-    $url = "https://fampaygateway.site/api/create_order.php?amount=$amount&api_key=$api_key"; 
-    $res = @json_decode(file_get_contents($url), true); 
-    if($res['status'] == "success"){ 
+    $url = "https://fampaygateway.site/api/create_order.php?" . http_build_query(["amount"=>$amount, "api_key"=>$api_key]);
+    $res = @json_decode(file_get_contents($url), true);
+    if(is_array($res) && ($res['status'] ?? '') == "success" && isset($res['data']['order_id'], $res['data']['upi_id'], $res['data']['qr_url'])){ 
         $data = $res['data']; 
         $order_id = $data['order_id']; 
         $expire_time = time() + (5 * 60); 
@@ -1147,50 +1185,79 @@ function createFamPayOrder($chat_id, $message_id, $user_id, $amount){
 }
 
 function checkPayment($chat_id, $message_id, $order_id){ 
-    $settings = json_decode(file_get_contents("settings.json"), true);
-    $api_key = $settings['api_key'];
-    $orders = json_decode(file_get_contents("orders.json"), true); 
-    if(!isset($orders[$order_id])){ 
-        editMsg($chat_id, $message_id, "❌ Order nahi mila ya expire ho gaya", btn([[["⬅️ Back","backkey"]]])); 
+    $settings = json_decode(file_get_contents("settings.json"), true) ?: [];
+    $api_key = $settings['api_key'] ?? '';
+    $orders = json_decode(file_get_contents("orders.json"), true) ?: [];
+
+    if(!isset($orders[$order_id]) || !isset($orders[$order_id]['expire'], $orders[$order_id]['amount'])){ 
+        editMsg($chat_id, $message_id, "❌ Order nahi mila ya expire ho gaya", btn([[['⬅️ Back','backkey']]])); 
         return; 
-    } 
-    if(time() > $orders[$order_id]['expire']){ 
+    }
+    $order = $orders[$order_id];
+    if ((string)($order['user'] ?? '') !== (string)$chat_id) {
+        editMsg($chat_id, $message_id, "❌ Ye payment order aapka nahi hai", btn([[['⬅️ Back','back']]]));
+        return;
+    }
+    if (($order['status'] ?? '') === 'cancelled') {
+        editMsg($chat_id, $message_id, "❌ Order Cancelled", btn([[['➕ New Payment','backkey']]]));
+        return;
+    }
+    if (($order['status'] ?? '') === 'expired') {
+        editMsg($chat_id, $message_id, "❌ Order Expired", btn([[['➕ New Payment','backkey']]]));
+        return;
+    }
+    if (($order['status'] ?? '') === 'paid') { 
+        editMsg($chat_id, $message_id, "✅ Payment already ho chuki hai", btn([[['⬅️ Menu','back']]])); 
+        return; 
+    }
+    if(time() > (int)$order['expire']){ 
         $orders[$order_id]['status'] = "expired"; 
-        file_put_contents("orders.json", json_encode($orders)); 
-        editMsg($chat_id, $message_id, "❌ <b>Order Expired!</b>\n\n5 Minute ho gaye. Naya order banao", btn([[["➕ New Payment","backkey"]]])); 
+        file_put_contents("orders.json", json_encode($orders), LOCK_EX); 
+        editMsg($chat_id, $message_id, "❌ <b>Order Expired!</b>\n\n5 Minute ho gaye. Naya order banao", btn([[['➕ New Payment','backkey']]])); 
         return; 
-    } 
-    if($orders[$order_id]['status'] == "paid"){ 
-        editMsg($chat_id, $message_id, "✅ Payment already ho chuki hai", btn([[["⬅️ Menu","back"]]])); 
-        return; 
-    } 
-    $url = "https://fampaygateway.site/api/verify.php?order_id=$order_id&api_key=$api_key"; 
+    }
+
+    $url = "https://fampaygateway.site/api/verify.php?" . http_build_query(["order_id"=>$order_id, "api_key"=>$api_key]);
     $res = @json_decode(file_get_contents($url), true); 
-    if($res['status'] == "success" && isset($res['data']['utr'])){ 
-        $amount = $res['data']['amount']; 
-        $user_id = $orders[$order_id]['user']; 
-        $balances = json_decode(file_get_contents("balances.json"), true); 
-        $balances[$user_id] += $amount; 
-        file_put_contents("balances.json", json_encode($balances)); 
+    if(is_array($res) && ($res['status'] ?? '') == "success" && !empty($res['data']['utr'])){ 
+        // Credit exactly the amount requested by this order, not an arbitrary API amount.
+        $amount = (float)$order['amount']; 
+        $user_id = $order['user']; 
+        $balances = json_decode(file_get_contents("balances.json"), true) ?: []; 
+        $balances[$user_id] = (float)($balances[$user_id] ?? 0) + $amount; 
+        file_put_contents("balances.json", json_encode($balances), LOCK_EX); 
         $orders[$order_id]['status'] = "paid"; 
-        file_put_contents("orders.json", json_encode($orders)); 
-        $msg = "✅ <b>Payment Successful!</b>\n\n₹$amount Balance me add ho gaya\nUTR: <code>{$res['data']['utr']}</code>\nTime: {$res['data']['payment_time']}"; 
-        editMsg($chat_id, $message_id, $msg, btn([[["⬅️ Menu","back"]]])); 
+        $orders[$order_id]['paid_at'] = time();
+        file_put_contents("orders.json", json_encode($orders), LOCK_EX); 
+        $utr = htmlspecialchars((string)$res['data']['utr'], ENT_QUOTES, 'UTF-8');
+        $paymentTime = htmlspecialchars((string)($res['data']['payment_time'] ?? date('d M Y H:i')), ENT_QUOTES, 'UTF-8');
+        $msg = "✅ <b>Payment Successful!</b>\n\n₹$amount Balance me add ho gaya\nUTR: <code>$utr</code>\nTime: $paymentTime"; 
+        editMsg($chat_id, $message_id, $msg, btn([[['⬅️ Menu','back']]])); 
     } else { 
-        $remaining = $orders[$order_id]['expire'] - time(); 
+        $remaining = max(0, (int)$order['expire'] - time()); 
         $min = floor($remaining/60); 
         $sec = $remaining%60; 
-        editMsg($chat_id, $message_id, "⏳ <b>Payment Pending</b>\n\nOrder Expire: {$min}m {$sec}s me\n'Check Payment' dabate raho", btn([["🔄 Check Payment","check_$order_id"],["❌ Cancel Order","cancel_$order_id"],["⬅️ Back","backkey"]])); 
+        editMsg($chat_id, $message_id, "⏳ <b>Payment Pending</b>\n\nOrder Expire: {$min}m {$sec}s me\nPayment ke baad 'Check Payment' dabao", btn([[['🔄 Check Payment',"check_$order_id"],['❌ Cancel Order',"cancel_$order_id"]],[['⬅️ Back','backkey']]])); 
     } 
 }
 
 function cancelOrder($chat_id, $message_id, $order_id){ 
-    $orders = json_decode(file_get_contents("orders.json"), true); 
-    if(isset($orders[$order_id])){ 
-        $orders[$order_id]['status'] = "cancelled"; 
-        file_put_contents("orders.json", json_encode($orders)); 
-        editMsg($chat_id, $message_id, "❌ <b>Order Cancelled</b>\n\nNaya payment kar sakte ho", btn([[["➕ New Payment","backkey"]]])); 
-    } 
+    $orders = json_decode(file_get_contents("orders.json"), true) ?: []; 
+    if(!isset($orders[$order_id]) || !isset($orders[$order_id]['expire'])){
+        editMsg($chat_id, $message_id, "❌ Order nahi mila", btn([[['⬅️ Back','backkey']]]));
+        return;
+    }
+    if ((string)($orders[$order_id]['user'] ?? '') !== (string)$chat_id){
+        editMsg($chat_id, $message_id, "❌ Ye payment order aapka nahi hai", btn([[['⬅️ Back','back']]]));
+        return;
+    }
+    if (($orders[$order_id]['status'] ?? '') === 'paid'){
+        editMsg($chat_id, $message_id, "❌ Paid order cancel nahi kiya ja sakta", btn([[['⬅️ Menu','back']]]));
+        return;
+    }
+    $orders[$order_id]['status'] = "cancelled"; 
+    file_put_contents("orders.json", json_encode($orders), LOCK_EX); 
+    editMsg($chat_id, $message_id, "❌ <b>Order Cancelled</b>\n\nNaya payment kar sakte ho", btn([[['➕ New Payment','backkey']]])); 
 }
 
 // ========== SEND FUNCTIONS FOR BROADCAST ==========

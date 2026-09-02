@@ -1,0 +1,11 @@
+RAILWAY SETUP
+
+1. Deploy this folder.
+2. Railway -> Service -> Variables:
+   BOT_TOKEN = your Telegram bot token
+   ADMIN_ID = your personal Telegram numeric user ID (NOT the bot ID)
+3. Generate a public Railway domain.
+4. Set Telegram webhook to:
+   https://YOUR-DOMAIN/index.php
+
+The application returns a simple health response on GET requests and handles Telegram webhook updates on POST requests.
